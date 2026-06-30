@@ -50,6 +50,7 @@ _client = genai.Client(api_key=config.GEMINI_API_KEY)
 # Free tier = ~15 requests/minute = 1 request every 4 seconds minimum.
 _RATE_LIMIT_PAUSE = 8   # seconds between each article (8s = ~7.5 req/min, well under 15 RPM limit)
 _MAX_RETRIES       = 1   # how many times to retry a 429 before giving up
+_daily_quota_exhausted = False  # Track if Gemini daily quota has been exhausted
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -201,6 +202,19 @@ def _summarise_one(article: dict[str, any]) -> dict[str, any]:
           - relevance_score (int)  : 1-5 AI/tech relevance score
           - summary_error   (bool) : True only if the Gemini call failed
     """
+    global _daily_quota_exhausted
+
+    if _daily_quota_exhausted:
+        fallback = article.get("description", "No summary available.")
+        return {
+            **article,
+            "summary":         fallback,
+            "bullets":         ["AI summary unavailable — see original article."],
+            "why_it_matters":  "See original article for details.",
+            "relevance_score": 3,
+            "summary_error":   True,
+        }
+
     prompt = _build_prompt(article)
 
     for attempt in range(1 + _MAX_RETRIES):   # attempt 0 = first try, attempt 1 = one retry
@@ -232,6 +246,13 @@ def _summarise_one(article: dict[str, any]) -> dict[str, any]:
             # many seconds to wait before the quota resets. We read that
             # number and sleep automatically — then loop back and try again.
             if "429" in error_str and attempt < _MAX_RETRIES:
+                if "wait" not in error_str.lower():
+                    # Daily quota exhaustion doesn't contain a retry delay, so fail fast
+                    print(f"      ❌ Daily quota exhausted. Retry resets at midnight PT.")
+                    logger.error("Gemini API daily quota exhausted (429 Resource Exhausted)")
+                    _daily_quota_exhausted = True
+                    break
+                
                 wait_seconds = _extract_retry_delay(error_str)
                 print(
                     f"      ⏳ Rate limited (429). "
@@ -250,6 +271,7 @@ def _summarise_one(article: dict[str, any]) -> dict[str, any]:
             if "429" in error_str:
                 print(f"      ❌ Daily quota exhausted. Retry resets at midnight PT.")
                 logger.error("Gemini API daily quota exhausted (429 Resource Exhausted)")
+                _daily_quota_exhausted = True
             else:
                 print(f"      ⚠️  Gemini failed (attempt {attempt+1}): {short_err}")
                 logger.error(f"Gemini API error (attempt {attempt+1}): {short_err}")
@@ -292,6 +314,9 @@ def summarise_articles(articles: list[dict[str, any]]) -> list[dict[str, any]]:
         Returns [] if input is empty.
         Never raises an exception — all errors are caught internally.
     """
+    global _daily_quota_exhausted
+    _daily_quota_exhausted = False
+
     if not articles:
         print("⚠️  [Summariser] No articles to summarise.")
         return []
@@ -316,8 +341,8 @@ def summarise_articles(articles: list[dict[str, any]]) -> list[dict[str, any]]:
             stars = "★" * score + "☆" * (5 - score)
             print(f"           ✅ Done  |  Relevance: {stars} ({score}/5)")
 
-        # Pause between requests — skip after the last one.
-        if i < total:
+        # Pause between requests — skip after the last one or if daily quota is exhausted.
+        if i < total and not _daily_quota_exhausted:
             time.sleep(_RATE_LIMIT_PAUSE)
 
     # ── Final summary ──────────────────────────────────────────────────────

@@ -31,9 +31,10 @@ from dotenv import load_dotenv   # reads the .env file and loads variables
 # ─────────────────────────────────────────────────────────────────────────────
 # load_dotenv() searches for a file named ".env" in the current directory
 # and loads every KEY=VALUE pair into the environment.
-# If the .env file doesn't exist, it silently does nothing (we catch that below).
+# We set override=True to ensure that values in the .env file take precedence
+# over any existing system or terminal environment variables.
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -207,10 +208,9 @@ today_str = datetime.date.today().strftime("%B %d, %Y")   # e.g. "June 30, 2026"
 EMAIL_SUBJECT: str = f"🤖 Your AI & Tech News Digest — {today_str}"
 
 # Gemini model to use for summarization.
-# "gemini-2.0-flash" = fast, free tier, excellent for summarization tasks.
-# "gemini-2.5-flash" = latest and smarter, same free tier.
-# "gemini-1.5-flash" is deprecated in the new SDK — do not use.
-GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+# "gemini-2.5-flash" = fast, free tier, excellent for summarization tasks.
+# "gemini-2.5-flash-lite" = optimized version for high-volume tasks.
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 # ── Template Configuration ──────────────────────────────────────────────────
