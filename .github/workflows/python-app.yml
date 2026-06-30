@@ -1,0 +1,45 @@
+# 📰 AI News Agent — CI Workflow
+# ═══════════════════════════════════════════════════════════════════════════════
+# PURPOSE:
+#   This GitHub Action automatically triggers on every push and pull request.
+#   It verifies that the code compiles successfully and that all imports
+#   and dependencies resolve without errors.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Python Application Check
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # ── Step 1: Checkout Repository ──────────────────────────────────────────
+    - name: Checkout repository code
+      uses: actions/checkout@v4
+
+    # ── Step 2: Set Up Python ────────────────────────────────────────────────
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: "pip" # Caches dependencies for faster subsequent runs
+
+    # ── Step 3: Install Dependencies ─────────────────────────────────────────
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    # ── Step 4: Validate Code Compilation ────────────────────────────────────
+    - name: Check code compilation (Syntax Check)
+      run: |
+        python -m py_compile main.py config.py news_fetcher.py summarizer.py email_sender.py app.py scheduler.py logger.py mock_data.py preview_email.py run_tests.py

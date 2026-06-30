@@ -1,0 +1,21 @@
+# ─────────────────────────────────────────────
+#  AI News Agent — Python Dependencies
+# ─────────────────────────────────────────────
+
+# HTTP requests (fetching news from APIs)
+requests==2.32.3
+
+# Google Gemini AI client — NEW official package (google-generativeai is deprecated)
+google-genai==1.16.0
+
+# Loads secrets from the .env file into environment variables
+python-dotenv==1.0.1
+
+# Scheduled task runner (runs the agent every morning automatically)
+schedule==1.2.2
+
+# HTML email templating (builds beautiful email bodies)
+Jinja2==3.1.4
+
+# Pretty terminal output during development/debugging
+rich==13.7.1

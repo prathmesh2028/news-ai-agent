@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<!--
+  templates/email.html — AI News Digest Email Template
+  ══════════════════════════════════════════════════════
+  IMPORTANT EMAIL RULES (why this looks different from normal HTML):
+
+  1. ALL CSS is INLINE (style="...") — email clients like Gmail and
+     Outlook strip <style> blocks from <head>. Inline CSS is the ONLY
+     reliable way to style emails.
+
+  2. TABLES are used for layout — not <div> or flexbox. Outlook renders
+     email in Microsoft Word's engine which ignores modern CSS layout.
+     Tables are the industry standard for email layout.
+
+  3. NO JavaScript — email clients block all JS for security.
+
+  4. Jinja2 {{ placeholders }} are filled by email_sender.py before sending:
+       {{ date }}             → "Monday, June 30, 2026"
+       {{ tech_articles }}    → list of main AI/tech articles
+       {{ breaking_articles }}→ list of breaking/general articles
+       {{ total_articles }}   → total article count (number)
+       {{ tech_count }}       → tech article count
+       {{ breaking_count }}   → breaking article count
+       {{ model }}            → Gemini model name
+       {{ send_time }}        → "07:00"
+
+  Each article dict has:
+       article.title, article.source, article.publishedAt,
+       article.summary, article.bullets (list), article.why_it_matters,
+       article.url, article.relevance_score
+-->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>AI &amp; Tech News Digest — {{ date }}</title>
+  <!--
+    The ONLY <style> block allowed: media queries for mobile.
+    These cannot be written as inline CSS, so this is the exception.
+    Gmail on Android supports media queries even when it strips <style>.
+  -->
+  <style type="text/css">
+    @media only screen and (max-width: 600px) {
+      .email-wrapper  { width: 100% !important; padding: 12px !important; }
+      .header-table   { padding: 24px 16px !important; }
+      .stat-cell      { display: block !important; width: 100% !important; padding: 8px 0 !important; }
+      .article-table  { padding: 16px !important; }
+      .card-title     { font-size: 15px !important; }
+      h1              { font-size: 22px !important; }
+    }
+  </style>
+</head>
+
+<body style="margin:0; padding:0; background-color:#0f0f1a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+
+<!-- ══ OUTER WRAPPER ═════════════════════════════════════════════════════ -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="background-color:#0f0f1a; padding:24px 0;">
+  <tr>
+    <td align="center">
+
+      <!-- Inner content table — max 620px wide -->
+      <table class="email-wrapper" role="presentation" width="620" cellpadding="0" cellspacing="0" border="0"
+        style="width:620px; max-width:620px; padding:0 16px;">
+
+        <!-- ══ HEADER ══════════════════════════════════════════════════ -->
+        <tr>
+          <td style="padding-bottom:20px;">
+            <table class="header-table" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="background-color:#111132; border:1px solid rgba(99,179,237,0.2); border-radius:16px; padding:36px 32px; text-align:center;">
+              <tr>
+                <td>
+                  <!-- Badge -->
+                  <div style="display:inline-block; background-color:rgba(99,179,237,0.12); border:1px solid rgba(99,179,237,0.3); border-radius:999px; padding:4px 18px; margin-bottom:16px; font-size:11px; font-weight:700; color:#63b3ed; letter-spacing:0.1em; text-transform:uppercase;">
+                    🤖 AI-POWERED DIGEST
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <!-- Main headline -->
+                  <h1 style="margin:0 0 8px 0; font-size:26px; font-weight:800; color:#ffffff; letter-spacing:-0.5px; line-height:1.2;">
+                    Your Daily AI &amp; Tech News
+                  </h1>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <!-- Date & model line -->
+                  <p style="margin:0; font-size:14px; color:#718096;">
+                    {{ date }} &nbsp;·&nbsp; Summarised by Gemini {{ model }}
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ══ STATS BAR ════════════════════════════════════════════════ -->
+        <tr>
+          <td style="padding-bottom:24px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <!-- Total Articles -->
+                <td class="stat-cell" width="33%" align="center" style="padding:0 6px 0 0;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="background-color:#111132; border:1px solid rgba(99,179,237,0.15); border-radius:12px; padding:14px 8px; text-align:center;">
+                    <tr><td style="font-size:24px; font-weight:800; color:#63b3ed; line-height:1; padding-bottom:4px;">{{ total_articles }}</td></tr>
+                    <tr><td style="font-size:10px; color:#718096; text-transform:uppercase; letter-spacing:0.08em;">Total Articles</td></tr>
+                  </table>
+                </td>
+                <!-- Tech / AI -->
+                <td class="stat-cell" width="33%" align="center" style="padding:0 3px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="background-color:#111132; border:1px solid rgba(99,179,237,0.15); border-radius:12px; padding:14px 8px; text-align:center;">
+                    <tr><td style="font-size:24px; font-weight:800; color:#68d391; line-height:1; padding-bottom:4px;">{{ tech_count }}</td></tr>
+                    <tr><td style="font-size:10px; color:#718096; text-transform:uppercase; letter-spacing:0.08em;">Tech / AI</td></tr>
+                  </table>
+                </td>
+                <!-- Breaking News -->
+                <td class="stat-cell" width="33%" align="center" style="padding:0 0 0 6px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="background-color:#111132; border:1px solid rgba(99,179,237,0.15); border-radius:12px; padding:14px 8px; text-align:center;">
+                    <tr><td style="font-size:24px; font-weight:800; color:#f6ad55; line-height:1; padding-bottom:4px;">{{ breaking_count }}</td></tr>
+                    <tr><td style="font-size:10px; color:#718096; text-transform:uppercase; letter-spacing:0.08em;">Breaking</td></tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+
+        <!-- ══ SECTION: TECH & AI ARTICLES ═════════════════════════════ -->
+        {% if tech_articles %}
+        <tr>
+          <td style="padding-bottom:10px;">
+            <p style="margin:0; font-size:10px; font-weight:700; color:#718096; text-transform:uppercase; letter-spacing:0.14em; padding-left:4px;">
+              🔬 &nbsp;Top Tech &amp; AI Stories
+            </p>
+          </td>
+        </tr>
+
+        {% for article in tech_articles %}
+        <tr>
+          <td style="padding-bottom:14px;">
+
+            <!-- Article Card -->
+            <table class="article-table" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="background-color:#111132; border:1px solid rgba(99,179,237,0.15); border-radius:14px; padding:22px 24px;">
+
+              <!-- ── Card Top: number + title + meta ── -->
+              <tr>
+                <td style="padding-bottom:14px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <!-- Index number badge -->
+                      <td width="34" valign="top" style="padding-right:12px; padding-top:2px;">
+                        <div style="width:28px; height:28px; background-color:rgba(99,179,237,0.12); border:1px solid rgba(99,179,237,0.3); border-radius:8px; font-size:12px; font-weight:700; color:#63b3ed; text-align:center; line-height:28px;">
+                          {{ loop.index }}
+                        </div>
+                      </td>
+                      <!-- Title + meta -->
+                      <td valign="top">
+                        <p class="card-title" style="margin:0 0 6px 0; font-size:16px; font-weight:700; color:#e2e8f0; line-height:1.4;">
+                          {{ article.title }}
+                        </p>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                          <tr>
+                            <!-- Source badge -->
+                            <td style="padding-right:10px;">
+                              <span style="display:inline-block; background-color:rgba(99,179,237,0.1); border:1px solid rgba(99,179,237,0.25); border-radius:6px; padding:2px 9px; font-size:11px; font-weight:600; color:#63b3ed;">
+                                {{ article.source }}
+                              </span>
+                            </td>
+                            <!-- Published date -->
+                            <td>
+                              <span style="font-size:12px; color:#718096;">
+                                {{ article.publishedAt[:10] if article.publishedAt else '' }}
+                              </span>
+                            </td>
+                            <!-- Relevance stars -->
+                            {% if article.relevance_score %}
+                            <td style="padding-left:10px;">
+                              <span style="font-size:11px; color:#f6ad55;">
+                                {% for i in range(article.relevance_score) %}★{% endfor %}{% for i in range(5 - article.relevance_score) %}☆{% endfor %}
+                              </span>
+                            </td>
+                            {% endif %}
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <!-- ── Headline (repeats title as a visual section heading) ── -->
+              <!-- This section = "Headline" requirement -->
+              <tr>
+                <td style="padding-bottom:12px; border-left:3px solid #63b3ed; padding-left:14px;">
+                  <p style="margin:0; font-size:13px; font-weight:600; color:#a0aec0; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">📰 Headline</p>
+                  <p style="margin:0; font-size:15px; font-weight:600; color:#e2e8f0; line-height:1.5;">
+                    {{ article.title }}
+                  </p>
+                </td>
+              </tr>
+
+              <!-- ── Summary ── -->
+              <tr>
+                <td style="padding-bottom:14px;">
+                  <p style="margin:0 0 6px 0; font-size:11px; font-weight:700; color:#718096; text-transform:uppercase; letter-spacing:0.08em;">📝 Summary</p>
+                  <p style="margin:0; font-size:14px; color:#cbd5e0; line-height:1.75;">
+                    {{ article.summary }}
+                  </p>
+                </td>
+              </tr>
+
+              <!-- ── Key Points (bullets) ── -->
+              {% if article.bullets %}
+              <tr>
+                <td style="padding-bottom:14px;">
+                  <p style="margin:0 0 8px 0; font-size:11px; font-weight:700; color:#718096; text-transform:uppercase; letter-spacing:0.08em;">📌 Key Points</p>
+                  {% for bullet in article.bullets %}
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:6px;">
+                    <tr>
+                      <td style="padding-right:8px; vertical-align:top; color:#63b3ed; font-weight:700; font-size:14px; line-height:1.5;">→</td>
+                      <td style="font-size:13px; color:#a0aec0; line-height:1.5;">{{ bullet }}</td>
+                    </tr>
+                  </table>
+                  {% endfor %}
+                </td>
+              </tr>
+              {% endif %}
+
+              <!-- ── Developer Insight (why_it_matters) ── -->
+              {% if article.why_it_matters and article.why_it_matters != 'Impact unknown.' %}
+              <tr>
+                <td style="padding-bottom:14px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                    style="background-color:rgba(159,122,234,0.08); border:1px solid rgba(159,122,234,0.25); border-radius:8px; padding:10px 14px;">
+                    <tr>
+                      <td style="font-size:12px; font-weight:700; color:#9f7aea; margin-bottom:4px; display:block; padding-bottom:4px;">
+                        💡 Developer Insight
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:13px; color:#b794f4; line-height:1.6;">
+                        {{ article.why_it_matters }}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              {% endif %}
+
+              <!-- ── Read More link ── -->
+              <tr>
+                <td>
+                  <a href="{{ article.url }}" target="_blank"
+                    style="display:inline-block; font-size:12px; font-weight:600; color:#63b3ed; text-decoration:none; border:1px solid rgba(99,179,237,0.35); border-radius:7px; padding:6px 14px;">
+                    Read full article →
+                  </a>
+                </td>
+              </tr>
+
+            </table><!-- /article card -->
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+
+
+        <!-- ══ DIVIDER ═══════════════════════════════════════════════════ -->
+        {% if breaking_articles %}
+        <tr>
+          <td style="padding:8px 0 20px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr><td style="border-top:1px solid rgba(255,255,255,0.07);"></td></tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ══ SECTION: BREAKING / GENERAL NEWS ════════════════════════ -->
+        <tr>
+          <td style="padding-bottom:10px;">
+            <p style="margin:0; font-size:10px; font-weight:700; color:#718096; text-transform:uppercase; letter-spacing:0.14em; padding-left:4px;">
+              ⚡ &nbsp;Important Breaking News
+            </p>
+          </td>
+        </tr>
+
+        {% for article in breaking_articles %}
+        <tr>
+          <td style="padding-bottom:14px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="background-color:#0e0e26; border:1px solid rgba(113,128,150,0.18); border-radius:14px; padding:18px 22px; opacity:0.9;">
+
+              <!-- Title + meta -->
+              <tr>
+                <td style="padding-bottom:10px;">
+                  <p style="margin:0 0 6px 0; font-size:15px; font-weight:700; color:#e2e8f0; line-height:1.4;">
+                    {{ tech_articles|length + loop.index }}. {{ article.title }}
+                  </p>
+                  <span style="display:inline-block; background-color:rgba(113,128,150,0.12); border:1px solid rgba(113,128,150,0.25); border-radius:6px; padding:2px 9px; font-size:11px; font-weight:600; color:#a0aec0;">
+                    {{ article.source }}
+                  </span>
+                  &nbsp;
+                  <span style="font-size:12px; color:#718096;">
+                    {{ article.publishedAt[:10] if article.publishedAt else '' }}
+                  </span>
+                </td>
+              </tr>
+
+              <!-- Summary -->
+              <tr>
+                <td style="padding-bottom:12px;">
+                  <p style="margin:0; font-size:13px; color:#a0aec0; line-height:1.7;">
+                    {{ article.summary }}
+                  </p>
+                </td>
+              </tr>
+
+              <!-- Read more -->
+              <tr>
+                <td>
+                  <a href="{{ article.url }}" target="_blank"
+                    style="display:inline-block; font-size:11px; font-weight:600; color:#a0aec0; text-decoration:none; border:1px solid rgba(113,128,150,0.3); border-radius:7px; padding:5px 12px;">
+                    Read full article →
+                  </a>
+                </td>
+              </tr>
+
+            </table>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+
+
+        <!-- ══ FOOTER ═══════════════════════════════════════════════════ -->
+        <tr>
+          <td style="padding-top:8px;">
+            <!-- Divider -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="margin-bottom:24px;">
+              <tr><td style="border-top:1px solid rgba(255,255,255,0.07);"></td></tr>
+            </table>
+
+            <!-- Footer content -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding-bottom:10px;">
+                  <!-- Logo mark -->
+                  <p style="margin:0; font-size:20px; font-weight:800; color:#63b3ed; letter-spacing:-0.5px;">
+                    🤖 AI News Agent
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-bottom:8px;">
+                  <p style="margin:0; font-size:12px; color:#4a5568; line-height:1.8;">
+                    Curated by <strong style="color:#718096;">Google Gemini {{ model }}</strong> &nbsp;·&nbsp; {{ date }}<br />
+                    Delivered at {{ send_time }} &nbsp;·&nbsp; {{ total_articles }} articles processed
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td align="center">
+                  <p style="margin:0; font-size:12px; color:#4a5568;">
+                    <a href="https://aistudio.google.com" style="color:#718096; text-decoration:none;">Google AI Studio</a>
+                    &nbsp;&nbsp;·&nbsp;&nbsp;
+                    <a href="https://newsapi.org" style="color:#718096; text-decoration:none;">NewsAPI</a>
+                    &nbsp;&nbsp;·&nbsp;&nbsp;
+                    <a href="https://github.com" style="color:#718096; text-decoration:none;">GitHub</a>
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+
+      </table><!-- /inner 620px table -->
+    </td>
+  </tr>
+</table><!-- /outer wrapper -->
+
+</body>
+</html>
