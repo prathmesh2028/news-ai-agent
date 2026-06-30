@@ -77,19 +77,21 @@ def _build_params(query: str, max_articles: int) -> dict[str, any]:
 #  HELPER: Normalise a raw NewsAPI article into our standard format
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _normalise_article(raw: dict[str, any]) -> Optional[dict[str, str]]:
+def _normalise_article(raw: dict[str, any], category: str = "Tech") -> Optional[dict[str, str]]:
     """
     Convert a raw article dict from NewsAPI into our clean, standard format.
 
     Why do we need this?
-    NewsAPI returns raw JSON with many fields we don't need (author, urlToImage,
+    NewsAPI returns raw JSON with many fields we don't need (author,
     content, etc.) and some that might be null/None. This function:
-      1. Picks only the 5 fields we care about.
+      1. Picks only the fields we care about (including thumbnail image).
       2. Skips articles that are missing title or URL (useless without them).
       3. Cleans up None values so downstream code never crashes on missing data.
+      4. Tags each article with its category for the email template.
 
     Args:
-        raw: A single article dict straight from the NewsAPI JSON response.
+        raw      : A single article dict straight from the NewsAPI JSON response.
+        category : A human-readable category tag (e.g., "AI & ML", "Big Tech").
 
     Returns:
         A clean article dict, or None if the article should be skipped.
@@ -105,12 +107,26 @@ def _normalise_article(raw: dict[str, any]) -> Optional[dict[str, str]]:
     if title == "[Removed]" or url == "https://removed.com":
         return None
 
+    # Preserve the thumbnail image URL from NewsAPI.
+    # This is often None — the email template handles that with a placeholder.
+    url_to_image = (raw.get("urlToImage") or "").strip() or None
+
+    domain = ""
+    try:
+        domain = url.split("//")[-1].split("/")[0]
+    except Exception:
+        pass
+    source_logo = f"https://www.google.com/s2/favicons?domain={domain}&sz=64" if domain else None
+
     return {
         "title":       title,
         "description": (raw.get("description") or "No description available.").strip(),
         "url":         url,
         "publishedAt": raw.get("publishedAt", "Unknown date"),
         "source":      raw.get("source", {}).get("name", "Unknown source"),
+        "urlToImage":  url_to_image,
+        "category":    category,
+        "source_logo": source_logo,
     }
 
 
@@ -118,7 +134,7 @@ def _normalise_article(raw: dict[str, any]) -> Optional[dict[str, str]]:
 #  HELPER: Make one HTTP request to NewsAPI for a given query
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _fetch_single_query(query: str, max_articles: int) -> list[dict[str, any]]:
+def _fetch_single_query(query: str, max_articles: int, category: str = "Tech") -> list[dict[str, any]]:
     """
     Send one request to NewsAPI and return a list of normalised articles.
 
@@ -134,6 +150,7 @@ def _fetch_single_query(query: str, max_articles: int) -> list[dict[str, any]]:
     Args:
         query       : The search keyword string
         max_articles: How many articles to fetch for this query
+        category    : Category tag to assign to all articles from this query
 
     Returns:
         A list of clean article dicts. Empty list if anything goes wrong.
@@ -209,10 +226,11 @@ def _fetch_single_query(query: str, max_articles: int) -> list[dict[str, any]]:
         # We use a list comprehension with a filter:
         #   [f(x) for x in items if condition]
         # _normalise_article returns None for bad articles, so we filter those out.
+        # We pass the category tag so every article knows its origin query type.
         clean_articles = [
             article
             for raw in raw_articles
-            if (article := _normalise_article(raw)) is not None
+            if (article := _normalise_article(raw, category=category)) is not None
         ]
 
         return clean_articles
@@ -311,6 +329,16 @@ def fetch_ai_news() -> list[dict[str, any]]:
     """
     print("\n🔍 Fetching AI & Tech news...")
 
+    # ── Category mapping for each primary query ────────────────────────────
+    # Maps each query string to a human-readable category tag for the email.
+    _QUERY_CATEGORIES = {
+        "artificial intelligence":        "AI & ML",
+        "technology":                     "Technology",
+        "machine learning deep learning": "AI & ML",
+        "big tech Google Microsoft Apple OpenAI": "Big Tech",
+        "cybersecurity data breach":      "Cybersecurity",
+    }
+
     # ── Phase 1: Fetch primary tech/AI articles ────────────────────────────
     # We ask for a small number per query so we don't hit rate limits.
     # articles_per_query: split our budget across the number of queries.
@@ -322,8 +350,9 @@ def fetch_ai_news() -> list[dict[str, any]]:
 
     tech_articles = []
     for query in config.NEWS_PRIMARY_QUERIES:
-        print(f"   📡 Querying: '{query}'")
-        results = _fetch_single_query(query, articles_per_query)
+        category = _QUERY_CATEGORIES.get(query, "Technology")
+        print(f"   📡 Querying: '{query}'  [category: {category}]")
+        results = _fetch_single_query(query, articles_per_query, category=category)
         tech_articles.extend(results)
 
     # ── Phase 2: Fetch breaking/urgent non-tech news ───────────────────────
@@ -337,6 +366,7 @@ def fetch_ai_news() -> list[dict[str, any]]:
     breaking_articles = _fetch_single_query(
         config.NEWS_BREAKING_QUERY,
         breaking_budget + 2,  # +2 buffer for dedup losses
+        category="Breaking News",
     )
 
     # ── Phase 3: Deduplicate each category separately ─────────────────────

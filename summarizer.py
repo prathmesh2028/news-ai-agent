@@ -83,7 +83,7 @@ def _build_prompt(article: dict[str, any]) -> str:
     description = article.get("description", "No description available.")
     source      = article.get("source", "Unknown")
 
-    return f"""You are an AI assistant writing a concise daily tech news digest.
+    return f"""You are an AI assistant writing a premium daily tech news digest newsletter.
 
 Analyse this news article and respond ONLY in the exact format below.
 Do not add any extra text, markdown headers, or explanations outside the format.
@@ -92,13 +92,16 @@ ARTICLE TITLE: {title}
 ARTICLE SOURCE: {source}
 ARTICLE DESCRIPTION: {description}
 
-Respond in EXACTLY this format (keep each section on one line):
-SUMMARY: [2-3 sentence plain-English summary. No jargon. Write for a smart non-expert reader.]
+Respond in EXACTLY this format:
+SUMMARY: [Write a 100-150 word plain-English summary. No jargon. Cover the key facts, context, and implications. Write for a smart non-expert reader who is busy and wants substance.]
 BULLETS:
-• [Key point 1 — most important fact]
-• [Key point 2 — second most important detail]
-• [Key point 3 — impact or what happens next]
-WHY_IT_MATTERS: [One sentence explaining why a tech-savvy person should care]
+• [Key point 1 — most important fact or announcement]
+• [Key point 2 — key technical detail or data point]
+• [Key point 3 — who is affected and how]
+• [Key point 4 — competitive landscape or market impact]
+• [Key point 5 — what happens next or timeline]
+• [Key point 6 — optional: additional insight if relevant]
+WHY_IT_MATTERS: [One or two sentences explaining why a tech-savvy professional should care about this right now]
 RELEVANCE_SCORE: [Integer 1-5 where: 5=core AI/ML news, 4=major tech industry, 3=general technology, 2=tangentially tech-related, 1=not tech-related at all]"""
 
 
@@ -166,7 +169,11 @@ def _parse_response(response_text: str) -> dict[str, any]:
                 pass   # Keep default if Gemini returned something unexpected
 
     if bullet_list:
-        result["bullets"] = bullet_list[:3]   # Keep at most 3 bullets
+        result["bullets"] = bullet_list[:6]   # Keep at most 6 bullets
+
+    # Estimate reading time from summary word count (min 2 minutes)
+    word_count = len(result["summary"].split())
+    result["read_time_minutes"] = max(2, round(word_count / 200 * 5))  # ~5 min per article
 
     return result
 
@@ -360,6 +367,165 @@ def summarise_articles(articles: list[dict[str, any]]) -> list[dict[str, any]]:
     )
 
     return summarised
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  GENERATE EXECUTIVE SUMMARY — One Gemini call for the whole digest
+# ─────────────────────────────────────────────────────────────────────────────
+
+def generate_executive_summary(articles: list[dict[str, any]]) -> list[str]:
+    """
+    Generate a "Today's Executive Brief" — 5-8 bullet points summarising
+    the entire day's news feed in one shot.
+
+    Uses a single Gemini call with all article titles + summaries.
+    Falls back to top article titles if Gemini is unavailable.
+
+    Args:
+        articles: The list of summarised article dicts.
+
+    Returns:
+        A list of 5-8 bullet point strings.
+    """
+    if not articles:
+        return ["No articles available for today's brief."]
+
+    # Build context: numbered list of headlines + summaries
+    article_context = "\n".join(
+        f"{i}. {a.get('title', 'Untitled')} — {a.get('summary', a.get('description', ''))[:150]}"
+        for i, a in enumerate(articles[:15], start=1)
+    )
+
+    prompt = f"""You are writing the executive summary section of a premium AI & tech newsletter.
+
+Given today's articles, write 5-8 concise bullet points that capture the most important developments.
+Each bullet should be one sentence, starting with a company or topic name.
+Write for busy tech professionals who want the highlights in 30 seconds.
+
+TODAY'S ARTICLES:
+{article_context}
+
+Respond with ONLY bullet points, one per line, starting with •. No headers, no intro text."""
+
+    try:
+        if _daily_quota_exhausted:
+            raise RuntimeError("Daily quota exhausted")
+
+        response = _client.models.generate_content(
+            model=config.GEMINI_MODEL,
+            contents=prompt,
+        )
+
+        if not response.text or not response.text.strip():
+            raise ValueError("Empty response")
+
+        bullets = [
+            line.lstrip("•- ").strip()
+            for line in response.text.strip().split("\n")
+            if line.strip().startswith(("•", "-")) and line.lstrip("•- ").strip()
+        ]
+
+        if bullets:
+            logger.info(f"Executive summary generated: {len(bullets)} bullet points")
+            return bullets[:8]
+
+    except Exception as error:
+        logger.warning(f"Executive summary generation failed: {str(error)[:100]}")
+
+    # Fallback: use top 5 article titles
+    return [a.get("title", "Untitled") for a in articles[:5]]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  GENERATE AI QUOTE — One inspiring quote about AI/technology
+# ─────────────────────────────────────────────────────────────────────────────
+
+def generate_ai_quote() -> dict[str, str]:
+    """
+    Generate one inspiring AI/technology quote using Gemini.
+
+    Returns:
+        A dict with keys 'text' and 'author'.
+        Falls back to a classic quote if Gemini is unavailable.
+    """
+    _FALLBACK_QUOTE = {
+        "text": "The best way to predict the future is to invent it.",
+        "author": "Alan Kay",
+    }
+
+    prompt = """Generate one inspiring, thought-provoking quote about artificial intelligence, technology, or the future of computing.
+
+It can be a real quote from a famous person OR an original quote you compose.
+If it's a real quote, attribute it correctly. If original, attribute it to "AI Reflection".
+
+Respond in EXACTLY this format (two lines only):
+QUOTE: [The quote text]
+AUTHOR: [The person's name]"""
+
+    try:
+        if _daily_quota_exhausted:
+            raise RuntimeError("Daily quota exhausted")
+
+        response = _client.models.generate_content(
+            model=config.GEMINI_MODEL,
+            contents=prompt,
+        )
+
+        if not response.text or not response.text.strip():
+            raise ValueError("Empty response")
+
+        quote_text = ""
+        quote_author = ""
+        for line in response.text.strip().split("\n"):
+            line = line.strip()
+            if line.startswith("QUOTE:"):
+                quote_text = line[len("QUOTE:"):].strip().strip('"')
+            elif line.startswith("AUTHOR:"):
+                quote_author = line[len("AUTHOR:"):].strip()
+
+        if quote_text and quote_author:
+            logger.info(f"AI quote generated: \"{quote_text[:50]}...\" — {quote_author}")
+            return {"text": quote_text, "author": quote_author}
+
+    except Exception as error:
+        logger.warning(f"AI quote generation failed: {str(error)[:100]}")
+
+    return _FALLBACK_QUOTE
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  GENERATE MARKET MENTIONS — Which big companies appeared in today's news
+# ─────────────────────────────────────────────────────────────────────────────
+
+def generate_market_mentions(articles: list[dict[str, any]]) -> dict[str, bool]:
+    """
+    Scan articles for mentions of major tech companies.
+
+    This is a simple keyword scan (no Gemini call needed) — fast and reliable.
+
+    Args:
+        articles: The list of article dicts.
+
+    Returns:
+        A dict mapping company names to True/False.
+        Example: {"NVIDIA": True, "Microsoft": True, "Google": False, ...}
+    """
+    _COMPANIES = ["NVIDIA", "Microsoft", "Google", "Meta", "OpenAI", "Anthropic", "Apple", "Amazon"]
+
+    # Build a single searchable text blob from all article titles + summaries
+    text_blob = " ".join(
+        f"{a.get('title', '')} {a.get('summary', '')} {a.get('description', '')}"
+        for a in articles
+    ).lower()
+
+    mentions = {}
+    for company in _COMPANIES:
+        mentions[company] = company.lower() in text_blob
+
+    mentioned_names = [c for c, v in mentions.items() if v]
+    logger.info(f"Market mentions scan: {', '.join(mentioned_names) if mentioned_names else 'none found'}")
+
+    return mentions
 
 
 # ─────────────────────────────────────────────────────────────────────────────

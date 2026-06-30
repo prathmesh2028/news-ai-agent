@@ -38,7 +38,12 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 # If any module has a syntax error, Python will tell you the filename here.
 import config                                # Step 1: settings & validation
 from news_fetcher import fetch_ai_news       # Step 2: fetch news articles
-from summarizer import summarise_articles    # Step 3: AI summarisation
+from summarizer import (
+    summarise_articles,      # Step 3: AI summarisation
+    generate_executive_summary,  # Step 3b: executive brief
+    generate_ai_quote,           # Step 3c: AI quote
+    generate_market_mentions,    # Step 3d: market snapshot
+)
 from email_sender import send_email          # Step 5: send email
 from logger import logger
 
@@ -214,12 +219,17 @@ def summarise_news(articles: list[dict[str, any]]) -> list[dict[str, any]]:
 #  STEP 4: Generate HTML Email Body
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_html(articles: list[dict[str, any]]) -> str | None:
+def generate_html(
+    articles: list[dict[str, any]],
+    executive_summary: list[str] = None,
+    ai_quote: dict[str, str] = None,
+    market_mentions: dict[str, bool] = None,
+) -> str | None:
     """
     Render the Jinja2 HTML email template with real article data.
 
     Loads templates/email.html and fills every {{ placeholder }} with
-    real data from the summarised articles.
+    real data from the summarised articles and enrichment data.
 
     Jinja2 works like mail-merge:
       Template has: "Hello {{ name }}"
@@ -227,7 +237,10 @@ def generate_html(articles: list[dict[str, any]]) -> str | None:
       Output:       "Hello Alice"
 
     Args:
-        articles: Summarised article list from summarise_news().
+        articles          : Summarised article list from summarise_news().
+        executive_summary : List of executive brief bullet strings.
+        ai_quote          : Dict with 'text' and 'author' keys.
+        market_mentions   : Dict mapping company names to True/False.
 
     Returns:
         A complete HTML string ready to be emailed.
@@ -254,23 +267,36 @@ def generate_html(articles: list[dict[str, any]]) -> str | None:
         tech_articles     = [a for a in articles if a.get("relevance_score", 3) >= 3]
         breaking_articles = [a for a in articles if a.get("relevance_score", 3) < 3]
 
+        # Count trending stories (relevance score 4-5)
+        trending_count = sum(1 for a in articles if a.get("relevance_score", 3) >= 4)
+
+        # Calculate average read time across all articles
+        read_times = [a.get("read_time_minutes", 3) for a in articles]
+        avg_read_time = round(sum(read_times) / len(read_times)) if read_times else 3
+
         today_str = datetime.date.today().strftime("%A, %B %d, %Y")
 
         # Render — every {{ variable }} in the template gets replaced here
         html = template.render(
-            subject           = config.EMAIL_SUBJECT,
-            date              = today_str,
-            send_time         = datetime.datetime.now().strftime("%H:%M"),
-            model             = config.GEMINI_MODEL,
-            tech_articles     = tech_articles,
-            breaking_articles = breaking_articles,
-            total_articles    = len(articles),
-            tech_count        = len(tech_articles),
-            breaking_count    = len(breaking_articles),
+            subject             = config.EMAIL_SUBJECT,
+            date                = today_str,
+            send_time           = datetime.datetime.now().strftime("%H:%M"),
+            model               = config.GEMINI_MODEL,
+            tech_articles       = tech_articles,
+            breaking_articles   = breaking_articles,
+            total_articles      = len(articles),
+            tech_count          = len(tech_articles),
+            breaking_count      = len(breaking_articles),
+            trending_count      = trending_count,
+            avg_read_time       = avg_read_time,
+            executive_summary   = executive_summary or [],
+            ai_quote            = ai_quote or {"text": "The future belongs to those who learn more skills and combine them in creative ways.", "author": "Robert Greene"},
+            market_mentions     = market_mentions or {},
+            greeting_name       = "Reader",
         )
 
         size_kb = len(html) / 1024
-        print(f"✅ Glassmorphic email template compiled successfully ({size_kb:.1f} KB,  "
+        print(f"✅ Premium newsletter template compiled successfully ({size_kb:.1f} KB,  "
               f"{len(tech_articles)} tech  +  {len(breaking_articles)} breaking articles)")
         return html
 
@@ -406,9 +432,30 @@ def run_pipeline() -> bool:
     # Non-critical — if Gemini fails, we use original descriptions as fallback.
     articles = summarise_news(articles)
 
+    # ── STEP 3b: Generate enrichment data ─────────────────────────────────
+    # These are additional Gemini calls that enrich the newsletter.
+    # Each has its own fallback if Gemini quota is exhausted.
+    _step(3, "Generating Newsletter Enrichments")
+    print("✨ Generating executive summary, AI quote, and market snapshot...")
+
+    executive_summary = generate_executive_summary(articles)
+    print(f"   ✅ Executive summary: {len(executive_summary)} bullet points")
+
+    ai_quote = generate_ai_quote()
+    print(f"   ✅ AI quote: \"{ai_quote['text'][:50]}...\"")
+
+    market_mentions = generate_market_mentions(articles)
+    mentioned = [c for c, v in market_mentions.items() if v]
+    print(f"   ✅ Market mentions: {', '.join(mentioned) if mentioned else 'none found'}")
+
     # ── STEP 4: Generate HTML ─────────────────────────────────────────────
     # Critical — without HTML there is nothing to email.
-    html = generate_html(articles)
+    html = generate_html(
+        articles,
+        executive_summary=executive_summary,
+        ai_quote=ai_quote,
+        market_mentions=market_mentions,
+    )
     if not html:
         print("\n💥 Aborting: HTML generation failed.")
         logger.critical("Pipeline aborted: HTML email body generation failed.")
